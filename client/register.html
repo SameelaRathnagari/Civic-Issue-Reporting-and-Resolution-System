@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="auth-container">
+
+<div class="auth-left">
+<h1>Civic Portal</h1>
+<p>Create your account</p>
+</div>
+
+<div class="auth-right">
+
+<h2>Register</h2>
+
+<input id="ruser" placeholder="Username">
+<input id="remail" placeholder="Email">
+<input id="rphone" placeholder="Phone Number">
+<input id="rdob" type="date">
+<input id="raddress" placeholder="Address">
+<input id="rpass" type="password" placeholder="Password">
+
+<button onclick="register()">Register</button>
+
+<p>Already have an account? <a href="login.html">Login</a></p>
+
+</div>
+
+</div>
+
+<script>
+
+function register(){
+
+if(!ruser.value || !rpass.value){
+alert("Username & Password required");
+return;
+}
+
+fetch("http://localhost:8080/register",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+username:ruser.value,
+password:rpass.value,
+email:remail.value,
+phone:rphone.value,
+dob:rdob.value,
+address:raddress.value
+})
+})
+.then(r=>r.text())
+.then(msg=>{
+alert(msg);
+if(msg==="Registered") location="login.html";
+})
+.catch(()=>alert("Server error"));
+
+}
+
+</script>
+
+</body>
+</html>

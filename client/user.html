@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+
+<style>
+.container {
+max-width: 1000px;
+margin: auto;
+padding: 20px;
+}
+
+.card {
+background: white;
+padding: 25px;
+border-radius: 16px;
+box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+margin-bottom: 20px;
+}
+
+input, select {
+width: 100%;
+padding: 12px;
+margin: 10px 0;
+border-radius: 8px;
+border: 1px solid #ddd;
+}
+
+.row {
+display: flex;
+gap: 10px;
+}
+
+.row button {
+width: 60px;
+}
+
+.submit {
+background: #2e7d32;
+color: white;
+width: 100%;
+padding: 12px;
+font-weight: bold;
+}
+
+.item {
+background: white;
+padding: 15px;
+margin: 10px 0;
+border-radius: 12px;
+box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.filter-btn {
+padding: 8px 12px;
+margin-right: 5px;
+border: none;
+border-radius: 6px;
+cursor: pointer;
+background: #eee;
+}
+
+.delete-btn {
+background: red;
+color: white;
+border: none;
+padding: 6px 10px;
+border-radius: 6px;
+margin-top: 8px;
+cursor: pointer;
+}
+
+.edit-btn {
+background: orange;
+color: white;
+border: none;
+padding: 6px 10px;
+border-radius: 6px;
+margin-top: 8px;
+cursor: pointer;
+}
+
+/* TOAST */
+#toast{
+position:fixed;
+bottom:20px;
+right:20px;
+background:#333;
+color:white;
+padding:12px 18px;
+border-radius:8px;
+display:none;
+z-index:999;
+}
+
+/* MODAL */
+#modal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.5);
+}
+
+#modalContent{
+background:white;
+width:400px;
+margin:100px auto;
+padding:20px;
+border-radius:10px;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="nav">
+<h2>🏛 Civic Portal</h2>
+<div>
+<span id="who"></span>
+<a href="#" onclick="logout()">Logout</a>
+</div>
+</div>
+
+<div class="container">
+
+<div class="card">
+<h3>📢 Report Issue</h3>
+
+<input id="title" placeholder="Title">
+<input id="desc" placeholder="Description">
+
+<select id="cat">
+<option>Garbage</option>
+<option>Road Damage</option>
+<option>Drainage</option>
+<option>Water Leakage</option>
+<option>Street Light</option>
+<option value="other">Other</option>
+</select>
+
+<input id="otherCat" placeholder="Other issue" style="display:none;">
+
+<div class="row">
+<input id="loc" placeholder="Location">
+<button onclick="getLocation()">📍</button>
+</div>
+
+<!-- 🔥 FILE + PREVIEW -->
+<input type="file" id="file" onchange="previewImage()">
+<img id="preview" style="display:none; width:100%; max-height:200px; margin-top:10px; border-radius:10px;">
+
+<button class="submit" onclick="add()">Submit Complaint</button>
+</div>
+
+<div class="card">
+<h3>📊 My Complaints</h3>
+
+<input id="search" placeholder="Search..." onkeyup="load()">
+
+<div style="margin:10px 0;">
+<button class="filter-btn" onclick="filterStatus('ALL')">All</button>
+<button class="filter-btn" onclick="filterStatus('PENDING')">Pending</button>
+<button class="filter-btn" onclick="filterStatus('IN_PROGRESS')">In Progress</button>
+<button class="filter-btn" onclick="filterStatus('RESOLVED')">Resolved</button>
+</div>
+
+<div id="list"></div>
+</div>
+
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MODAL -->
+<div id="modal">
+  <div id="modalContent">
+    <h3>📊 Complaint Timeline</h3>
+    <div id="timeline"></div>
+    <button onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+
+let token = localStorage.getItem("token");
+
+if(!token){
+alert("Login first");
+location="login.html";
+}
+
+let p = JSON.parse(atob(token.split(".")[1]));
+document.getElementById("who").innerText = "👤 " + p.user;
+
+function logout(){
+localStorage.removeItem("token");
+location="login.html";
+}
+
+// TOAST
+function showToast(msg,color="#333"){
+let t=document.getElementById("toast");
+t.innerText=msg;
+t.style.background=color;
+t.style.display="block";
+setTimeout(()=>t.style.display="none",2000);
+}
+
+// 🔥 IMAGE PREVIEW
+function previewImage(){
+let f = file.files[0];
+
+if(!f){
+preview.style.display="none";
+return;
+}
+
+let reader = new FileReader();
+
+reader.onload = function(e){
+preview.src = e.target.result;
+preview.style.display = "block";
+};
+
+reader.readAsDataURL(f);
+}
+
+cat.addEventListener("change", () => {
+otherCat.style.display = (cat.value === "other") ? "block" : "none";
+});
+
+function getLocation(){
+navigator.geolocation.getCurrentPosition(pos=>{
+loc.value = pos.coords.latitude + "," + pos.coords.longitude;
+});
+}
+
+let loading = false;
+let currentFilter = "ALL";
+let editId = null;
+
+function filterStatus(status){
+currentFilter = status;
+load();
+}
+
+function startEdit(id,titleVal,descVal,catVal,locVal){
+editId = id;
+
+title.value = titleVal;
+desc.value = descVal;
+cat.value = catVal;
+loc.value = locVal;
+
+document.querySelector(".submit").innerText = "Update Complaint";
+
+window.scrollTo({top:0,behavior:"smooth"});
+}
+
+function add(){
+
+if(loading) return;
+loading = true;
+
+let category = (cat.value === "other") ? otherCat.value : cat.value;
+
+let url = "http://localhost:8080/add";
+let method = "POST";
+let body;
+
+if(editId){
+url = `http://localhost:8080/edit/${editId}`;
+method = "PUT";
+
+body = JSON.stringify({
+title:title.value,
+desc:desc.value,
+category:category,
+location:loc.value
+});
+}
+else{
+let f=new FormData();
+f.append("title",title.value);
+f.append("desc",desc.value);
+f.append("category",category);
+f.append("location",loc.value);
+f.append("file",file.files[0]);
+body = f;
+}
+
+fetch(url,{
+method:method,
+headers:{
+"Authorization":token,
+...(editId && {"Content-Type":"application/json"})
+},
+body:body
+})
+.then(r=>r.text())
+.then(msg=>{
+
+showToast(msg,"green");
+
+title.value = "";
+desc.value = "";
+loc.value = "";
+file.value = "";
+
+// 🔥 CLEAR PREVIEW
+preview.style.display="none";
+
+editId = null;
+document.querySelector(".submit").innerText = "Submit Complaint";
+
+setTimeout(()=>load(),300);
+
+loading = false;
+
+});
+}
+
+// DELETE
+function deleteComplaint(id){
+if(!confirm("Delete this complaint?")) return;
+
+fetch(`http://localhost:8080/delete/${id}`,{
+method:"DELETE",
+headers:{"Authorization":token}
+})
+.then(r=>r.text())
+.then(msg=>{
+showToast(msg,"red");
+load();
+});
+}
+
+// TIMELINE
+function viewLogs(id){
+fetch(`http://localhost:8080/logs/${id}`,{
+headers:{Authorization:token}
+})
+.then(r=>r.json())
+.then(data=>{
+let html="";
+data.forEach(l=>{
+html += `<p>➡ ${l.status}<br><small>${l.updated_at}</small></p><hr>`;
+});
+timeline.innerHTML = html;
+modal.style.display="block";
+});
+}
+
+function closeModal(){
+modal.style.display="none";
+}
+
+function load(){
+
+fetch("http://localhost:8080/all",{
+headers:{"Authorization":token}
+})
+.then(r=>r.json())
+.then(data=>{
+
+let html="";
+let searchText = document.getElementById("search").value.toLowerCase();
+
+data.forEach(c=>{
+
+if(currentFilter !== "ALL" && c.status !== currentFilter) return;
+
+if(!c.title.toLowerCase().includes(searchText) &&
+!c.description.toLowerCase().includes(searchText)) return;
+
+let statusUI = c.status==="PENDING"?"🟡 Pending":
+c.status==="IN_PROGRESS"?"🔵 In Progress":"🟢 Resolved";
+
+html+=`
+<div class="item">
+<b>${c.title}</b>
+<p>${c.description}</p>
+<p>📂 ${c.category}</p>
+<p>Status: ${statusUI}</p>
+<p><a href="${c.mapLink}" target="_blank">📍 Open in Maps</a></p>
+
+<button class="edit-btn"
+onclick="startEdit(${c.id},'${c.title}','${c.description}','${c.category}','${c.location}')">
+Edit
+</button>
+
+<button class="delete-btn" onclick="deleteComplaint(${c.id})">
+Delete
+</button>
+
+<button onclick="viewLogs(${c.id})">Timeline</button>
+
+</div>
+`;
+
+});
+
+list.innerHTML=html;
+
+});
+}
+
+load();
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- SOCKET.IO -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<style>
+body{
+font-family:'Poppins',sans-serif;
+background:#f4f6f9;
+margin:0;
+}
+
+.nav{
+background:#002147;
+color:white;
+padding:15px;
+display:flex;
+justify-content:space-between;
+}
+
+.dashboard{ padding:20px; }
+
+.stats{
+display:flex;
+gap:20px;
+margin-bottom:20px;
+flex-wrap:wrap;
+}
+
+.card{
+flex:1;
+min-width:200px;
+background:white;
+padding:20px;
+border-radius:16px;
+text-align:center;
+box-shadow:0 6px 20px rgba(0,0,0,0.1);
+}
+
+.chart-card, .list{
+background:white;
+padding:20px;
+border-radius:16px;
+box-shadow:0 6px 20px rgba(0,0,0,0.1);
+margin-bottom:20px;
+}
+
+.item{
+background:white;
+padding:20px;
+margin:15px 0;
+border-radius:14px;
+box-shadow:0 4px 15px rgba(0,0,0,0.1);
+display:flex;
+flex-direction:column;
+gap:8px;
+}
+
+.status{
+padding:5px 10px;
+border-radius:20px;
+font-size:12px;
+font-weight:bold;
+}
+
+.s1{background:#fff3cd;color:#856404;}
+.s2{background:#cce5ff;color:#004085;}
+.s3{background:#d4edda;color:#155724;}
+
+button{
+padding:8px 12px;
+border:none;
+border-radius:8px;
+margin:5px;
+cursor:pointer;
+}
+
+.pending{background:#f39c12;color:white;}
+.progress{background:#007bff;color:white;}
+.done{background:#28a745;color:white;}
+
+#toast{
+position:fixed;
+bottom:20px;
+right:20px;
+background:#333;
+color:white;
+padding:12px 18px;
+border-radius:8px;
+display:none;
+}
+
+/* LOADER */
+#loader{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.4);
+justify-content:center;
+align-items:center;
+z-index:999;
+}
+
+#loader div{
+width:50px;
+height:50px;
+border:5px solid #fff;
+border-top:5px solid orange;
+border-radius:50%;
+animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+0%{transform:rotate(0deg);}
+100%{transform:rotate(360deg);}
+}
+
+/* 🔔 NOTIFICATION */
+#notifyBox{
+display:none;
+position:fixed;
+top:20px;
+right:20px;
+background:#002147;
+color:white;
+padding:15px 20px;
+border-radius:10px;
+box-shadow:0 5px 20px rgba(0,0,0,0.3);
+z-index:1000;
+}
+
+/* IMAGE POPUP */
+#imgModal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.8);
+justify-content:center;
+align-items:center;
+}
+
+#imgModal img{
+max-width:90%;
+max-height:90%;
+border-radius:10px;
+}
+
+#modal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.5);
+}
+
+#modalContent{
+background:white;
+width:400px;
+margin:100px auto;
+padding:20px;
+border-radius:10px;
+}
+</style>
+
+</head>
+
+<body>
+
+<!-- 🔔 SOUND -->
+<audio id="notifySound" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
+
+<!-- 🔔 POPUP -->
+<div id="notifyBox">🔔 New update received</div>
+
+<!-- LOADER -->
+<div id="loader"><div></div></div>
+
+<div class="nav">
+<h2>🏛 Admin Dashboard</h2>
+<a href="login.html" style="color:white">Logout</a>
+</div>
+
+<div class="dashboard">
+
+<div class="stats">
+<div class="card"><h3 id="pending">0</h3><p>Pending</p></div>
+<div class="card"><h3 id="progress">0</h3><p>In Progress</p></div>
+<div class="card"><h3 id="done">0</h3><p>Resolved</p></div>
+</div>
+
+<div class="chart-card">
+<h3>📊 Complaint Overview</h3>
+<canvas id="chart"></canvas>
+</div>
+
+<div class="list">
+
+<div style="display:flex; justify-content:space-between;">
+<h3>All Complaints</h3>
+<input id="search" placeholder="Search..." style="padding:8px;border-radius:6px;">
+</div>
+
+<div style="margin:10px 0;">
+<button onclick="setFilter('ALL')">All</button>
+<button onclick="setFilter('PENDING')">Pending</button>
+<button onclick="setFilter('IN_PROGRESS')">Progress</button>
+<button onclick="setFilter('RESOLVED')">Resolved</button>
+</div>
+
+<div id="list"></div>
+
+</div>
+
+</div>
+
+<div id="toast"></div>
+
+<!-- IMAGE POPUP -->
+<div id="imgModal" onclick="closeImage()">
+  <img id="fullImg">
+</div>
+
+<!-- TIMELINE -->
+<div id="modal">
+  <div id="modalContent">
+    <h3>📊 Complaint Timeline</h3>
+    <div id="timeline"></div>
+    <button onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+
+let token = localStorage.getItem("token");
+let currentFilter="ALL";
+let chartInstance=null;
+
+if(!token){ location="login.html"; }
+
+// 🔥 SOCKET
+const socket = io("http://localhost:8080");
+
+socket.on("update",()=>{
+showNotification();
+load();
+});
+
+// 🔔 NOTIFICATION
+function showNotification(){
+notifySound.play();
+notifyBox.style.display="block";
+setTimeout(()=>notifyBox.style.display="none",3000);
+}
+
+// LOADER
+function showLoader(){ loader.style.display="flex"; }
+function hideLoader(){ loader.style.display="none"; }
+
+function showToast(msg,color="#333"){
+let t=document.getElementById("toast");
+t.innerText=msg;
+t.style.background=color;
+t.style.display="block";
+setTimeout(()=>t.style.display="none",2000);
+}
+
+function setFilter(f){
+currentFilter=f;
+load();
+}
+
+function openImage(src){
+fullImg.src = src;
+imgModal.style.display="flex";
+}
+
+function closeImage(){
+imgModal.style.display="none";
+}
+
+function viewLogs(id){
+fetch(`http://localhost:8080/logs/${id}`,{
+headers:{Authorization:token}
+})
+.then(r=>r.json())
+.then(data=>{
+let html="";
+data.forEach(l=>{
+html += `<p>➡ ${l.status}<br><small>${l.updated_at}</small></p><hr>`;
+});
+timeline.innerHTML = html;
+modal.style.display="block";
+});
+}
+
+function closeModal(){
+modal.style.display="none";
+}
+
+function load(){
+
+showLoader();
+
+fetch("http://localhost:8080/all",{headers:{Authorization:token}})
+.then(r=>r.json())
+.then(data=>{
+
+let html="";
+let p=0,pr=0,d=0;
+
+let keyword=search.value?.toLowerCase()||"";
+
+data.forEach(c=>{
+
+if(currentFilter!=="ALL" && c.status!==currentFilter) return;
+
+let text=(c.title+c.description).toLowerCase();
+if(!text.includes(keyword)) return;
+
+if(c.status==="PENDING") p++;
+else if(c.status==="IN_PROGRESS") pr++;
+else d++;
+
+let statusUI=
+c.status==="PENDING" ? '<span class="status s1">Pending</span>' :
+c.status==="IN_PROGRESS" ? '<span class="status s2">In Progress</span>' :
+'<span class="status s3">Resolved</span>';
+
+html+=`
+<div class="item">
+
+<h4>${c.title}</h4>
+<p>${c.description}</p>
+<p><b>User:</b> ${c.user}</p>
+<p><a href="${c.mapLink}" target="_blank">📍 Open Map</a></p>
+<p>${statusUI}</p>
+
+${c.image ? `
+<img src="http://localhost:8080/uploads/${c.image}" 
+onclick="openImage(this.src)"
+style="width:180px;height:140px;object-fit:cover;border-radius:10px;cursor:pointer;">
+` : ""}
+
+<div style="display:flex;flex-wrap:wrap;">
+<button class="pending" onclick="update(${c.id},'PENDING')">Pending</button>
+<button class="progress" onclick="update(${c.id},'IN_PROGRESS')">Progress</button>
+<button class="done" onclick="update(${c.id},'RESOLVED')">Done</button>
+<button onclick="viewLogs(${c.id})">Timeline</button>
+</div>
+
+</div>
+`;
+});
+
+// EMPTY STATE
+if(html===""){
+html = `
+<div style="text-align:center;padding:40px;">
+<h3>No complaints found</h3>
+<p>Everything looks clean 👍</p>
+</div>
+`;
+}
+
+list.innerHTML=html;
+
+pending.innerText=p;
+progress.innerText=pr;
+done.innerText=d;
+
+if(chartInstance) chartInstance.destroy();
+
+chartInstance=new Chart(document.getElementById("chart"),{
+type:"bar",
+data:{
+labels:["Pending","Progress","Resolved"],
+datasets:[{data:[p,pr,d]}]
+}
+});
+
+hideLoader();
+
+});
+}
+
+function update(id,status){
+fetch(`http://localhost:8080/status/${id}?status=${status}`,{
+method:"PUT",
+headers:{Authorization:token}
+})
+.then(()=>showToast("Updated ✔","green"));
+}
+
+search.addEventListener("input",load);
+
+load();
+
+</script>
+
+</body>
+</html>

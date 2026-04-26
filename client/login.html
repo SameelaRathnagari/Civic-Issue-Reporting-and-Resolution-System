@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="auth-container">
+
+<div class="auth-left">
+<h1>Civic Portal</h1>
+<p>Login to your account</p>
+</div>
+
+<div class="auth-right">
+
+<h2>Login</h2>
+
+<input id="luser" placeholder="Username">
+<input id="lpass" type="password" placeholder="Password">
+
+<button onclick="login()">Login</button>
+
+<p>Don't have an account? <a href="register.html">Register</a></p>
+
+</div>
+
+</div>
+
+<script>
+
+function login(){
+
+if(!luser.value || !lpass.value){
+alert("Enter credentials");
+return;
+}
+
+fetch("http://localhost:8080/login",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+username:luser.value,
+password:lpass.value
+})
+})
+.then(r=>r.text())
+.then(t=>{
+
+if(t==="Invalid"){
+alert("Wrong credentials");
+return;
+}
+
+localStorage.setItem("token",t);
+
+let p = JSON.parse(atob(t.split(".")[1]));
+
+if(p.role==="ADMIN") location="admin.html";
+else location="user.html";
+
+});
+
+}
+
+</script>
+
+</body>
+</html>
