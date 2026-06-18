@@ -4,14 +4,13 @@ const multer = require("multer");
 const jwt = require("jsonwebtoken");
 const db = require("./db");
 const fs = require("fs");
-require("dotenv").config(); // ✅ added
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 app.use("/uploads", express.static("uploads"));
 
-const SECRET = process.env.SECRET || "secret123"; // ✅ changed
+const SECRET = "secret123";
 
 // ================= UPLOAD =================
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
@@ -199,7 +198,7 @@ res.send(data);
 });
 });
 
-// ================= EDIT =================
+// ================= EDIT COMPLAINT (🔥 FIX ADDED) =================
 app.put("/edit/:id", verify, (req, res) => {
 
 const { title, desc, category, location } = req.body;
@@ -236,7 +235,7 @@ res.send("Deleted");
 
 });
 
-// ================= STATUS =================
+// ================= UPDATE STATUS =================
 app.put("/status/:id", verify, (req,res)=>{
 
 if(req.user.role !== "ADMIN") return res.send("Access denied");
@@ -260,7 +259,7 @@ res.send("Updated");
 
 });
 
-// ================= LOGS =================
+// ================= GET LOGS =================
 app.get("/logs/:id", verify, (req,res)=>{
 
 db.query(
@@ -273,6 +272,4 @@ res.send(result);
 
 });
 
-// ✅ FIXED PORT FOR DEPLOYMENT
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log("Server running on port " + PORT));
+app.listen(8080,()=>console.log("Server running on 8080"));
